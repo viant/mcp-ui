@@ -1,6 +1,7 @@
 package resource_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/viant/mcp-protocol/schema"
@@ -150,5 +151,19 @@ func TestNewResourceRejectsEmptyInputs(t *testing.T) {
 	}
 	if _, err := resource.NewEmbeddedHTMLResource("ui://agently.wk_ab12cd34ef56ab78/demo/show_widget", "", nil, metaui.ResourceUI{}); err == nil {
 		t.Fatal("expected empty html error")
+	}
+}
+
+func TestNewResourceRejectsOversizedHTML(t *testing.T) {
+	oversized := strings.Repeat("a", resource.MaxHTMLBytes+1)
+	uri := "ui://agently.wk_ab12cd34ef56ab78/demo/show_widget"
+	if _, err := resource.NewHTMLContents(uri, oversized, metaui.ResourceUI{}); err == nil {
+		t.Fatal("expected oversized html error for NewHTMLContents")
+	}
+	if _, err := resource.NewReadResultHTMLContents(uri, oversized, metaui.ResourceUI{}); err == nil {
+		t.Fatal("expected oversized html error for NewReadResultHTMLContents")
+	}
+	if _, err := resource.NewEmbeddedHTMLResource(uri, oversized, nil, metaui.ResourceUI{}); err == nil {
+		t.Fatal("expected oversized html error for NewEmbeddedHTMLResource")
 	}
 }

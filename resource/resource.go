@@ -10,11 +10,23 @@ import (
 	metaui "github.com/viant/mcp-ui/meta"
 )
 
+// MaxHTMLBytes is the maximum allowed HTML payload size for MCP UI resources.
+// Oversized payloads are rejected deterministically at construction time
+// instead of attempting partial rendering in browser hosts.
+const MaxHTMLBytes = 1024 * 1024 // 1 MiB
+
 // ContentHash returns the canonical UI resource content hash for the supplied
 // text payload.
 func ContentHash(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func validateHTMLPayloadSize(html string) error {
+	if len(html) > MaxHTMLBytes {
+		return fmt.Errorf("ui html exceeds max size: %d bytes > %d bytes", len(html), MaxHTMLBytes)
+	}
+	return nil
 }
 
 // NewHTMLResource constructs a UI resource declaration for a `ui://...` HTML
@@ -49,6 +61,9 @@ func NewHTMLContents(uri, html string, ui metaui.ResourceUI) (*schema.TextResour
 	if html == "" {
 		return nil, fmt.Errorf("ui resource contents: html text is required")
 	}
+	if err := validateHTMLPayloadSize(html); err != nil {
+		return nil, err
+	}
 	mimeType := capabilities.ResourceMimeType
 	contents := &schema.TextResourceContents{
 		Uri:      uri,
@@ -68,6 +83,9 @@ func NewReadResultHTMLContents(uri, html string, ui metaui.ResourceUI) (*schema.
 	if html == "" {
 		return nil, fmt.Errorf("ui read contents: html text is required")
 	}
+	if err := validateHTMLPayloadSize(html); err != nil {
+		return nil, err
+	}
 	mimeType := capabilities.ResourceMimeType
 	contents := &schema.ReadResourceResultContentsElem{
 		Uri:      uri,
@@ -86,6 +104,9 @@ func NewEmbeddedHTMLResource(uri, html string, annotations *schema.Annotations, 
 	}
 	if html == "" {
 		return nil, fmt.Errorf("embedded ui resource: html text is required")
+	}
+	if err := validateHTMLPayloadSize(html); err != nil {
+		return nil, err
 	}
 	mimeType := capabilities.ResourceMimeType
 	embedded := &schema.EmbeddedResource{
