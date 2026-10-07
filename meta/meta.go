@@ -79,6 +79,10 @@ const FallbackEmbedded = "embedded"
 // ToolUI is the typed representation of `_meta.ui` as it appears on a
 // schema.Tool. Fields with their zero values are omitted on write.
 type ToolUI struct {
+	// Visibility is the official audience list. Nil defaults to model and app;
+	// an explicitly empty slice denies both.
+	Visibility []string
+
 	// ResourceUri is the canonical `ui://...` resource advertised by the
 	// tool. Required when emitting UI metadata.
 	ResourceUri string
@@ -95,7 +99,21 @@ type ToolUI struct {
 
 // ResourceUI is the typed representation of `_meta.ui` as it appears on a
 // schema.Resource or on a schema.ResourceContents entry.
+// ResourceCSP contains the official stable resource-owned domain declarations.
+type ResourceCSP struct {
+	ConnectDomains  []string `json:"connectDomains,omitempty"`
+	ResourceDomains []string `json:"resourceDomains,omitempty"`
+	FrameDomains    []string `json:"frameDomains,omitempty"`
+	BaseUriDomains  []string `json:"baseUriDomains,omitempty"`
+}
+
 type ResourceUI struct {
+	// OfficialCSP encodes _meta.ui.csp as the stable object. CSP/CSPPolicy below
+	// are legacy adapter fields and must not be treated as normative metadata.
+	OfficialCSP   *ResourceCSP
+	Domain        string
+	PrefersBorder *bool
+
 	// AllowedTools is the authoritative per-resource tool allowlist that
 	// guest-originated `tools/call` requests are validated against.
 	AllowedTools []string
@@ -347,6 +365,11 @@ func GetEmbeddedResourceUI(resource *schema.EmbeddedResource) (ResourceUI, bool)
 }
 
 func writeToolUI(sub map[string]interface{}, ui ToolUI) {
+	if ui.Visibility != nil {
+		sub["visibility"] = toInterfaceSlice(ui.Visibility)
+	} else {
+		delete(sub, "visibility")
+	}
 	if ui.ResourceUri != "" {
 		sub[FieldResourceUri] = ui.ResourceUri
 	} else {
@@ -366,6 +389,12 @@ func writeToolUI(sub map[string]interface{}, ui ToolUI) {
 
 func readToolUI(sub map[string]interface{}) ToolUI {
 	out := ToolUI{}
+	if value, ok := sub["visibility"]; ok {
+		out.Visibility = readStringSlice(value)
+		if out.Visibility == nil {
+			out.Visibility = []string{}
+		}
+	}
 	if v, ok := sub[FieldResourceUri].(string); ok {
 		out.ResourceUri = v
 	}
@@ -377,6 +406,16 @@ func readToolUI(sub map[string]interface{}) ToolUI {
 }
 
 func writeResourceUI(sub map[string]interface{}, ui ResourceUI) {
+	if ui.Domain != "" {
+		sub["domain"] = ui.Domain
+	} else {
+		delete(sub, "domain")
+	}
+	if ui.PrefersBorder != nil {
+		sub["prefersBorder"] = *ui.PrefersBorder
+	} else {
+		delete(sub, "prefersBorder")
+	}
 	if len(ui.AllowedTools) > 0 {
 		sub[FieldAllowedTools] = toInterfaceSlice(ui.AllowedTools)
 	} else {
@@ -412,7 +451,14 @@ func writeResourceUI(sub map[string]interface{}, ui ResourceUI) {
 	} else {
 		delete(sub, FieldCSPPolicy)
 	}
-	if ui.CSP != "" {
+	if ui.OfficialCSP != nil {
+		sub[FieldCSP] = map[string]interface{}{
+			"connectDomains":  toInterfaceSlice(ui.OfficialCSP.ConnectDomains),
+			"resourceDomains": toInterfaceSlice(ui.OfficialCSP.ResourceDomains),
+			"frameDomains":    toInterfaceSlice(ui.OfficialCSP.FrameDomains),
+			"baseUriDomains":  toInterfaceSlice(ui.OfficialCSP.BaseUriDomains),
+		}
+	} else if ui.CSP != "" {
 		sub[FieldCSP] = ui.CSP
 	} else {
 		delete(sub, FieldCSP)
@@ -426,6 +472,13 @@ func writeResourceUI(sub map[string]interface{}, ui ResourceUI) {
 
 func readResourceUI(sub map[string]interface{}) ResourceUI {
 	out := ResourceUI{}
+	out.Domain, _ = sub["domain"].(string)
+	if value, ok := sub["prefersBorder"].(bool); ok {
+		out.PrefersBorder = &value
+	}
+	if csp, ok := sub[FieldCSP].(map[string]interface{}); ok {
+		out.OfficialCSP = &ResourceCSP{ConnectDomains: readStringSlice(csp["connectDomains"]), ResourceDomains: readStringSlice(csp["resourceDomains"]), FrameDomains: readStringSlice(csp["frameDomains"]), BaseUriDomains: readStringSlice(csp["baseUriDomains"])}
+	}
 	out.AllowedTools = readStringSlice(sub[FieldAllowedTools])
 	out.AllowedToolBundles = readStringSlice(sub[FieldAllowedToolBundles])
 	if v, ok := sub[FieldContentHash].(string); ok {
@@ -453,11 +506,11 @@ func readResourceUI(sub map[string]interface{}) ResourceUI {
 }
 
 func isZeroToolUI(ui ToolUI) bool {
-	return ui.ResourceUri == "" && ui.Fallback == "" && len(ui.AllowedTools) == 0
+	return ui.ResourceUri == "" && ui.Fallback == "" && len(ui.AllowedTools) == 0 && ui.Visibility == nil
 }
 
 func isZeroResourceUI(ui ResourceUI) bool {
-	return ui.ContentHash == "" && ui.ProtocolVersion == "" && ui.RendererURL == "" && ui.Sandbox == "" && ui.CSP == "" && (ui.CSPPolicy == nil || isZeroCSPPolicy(ui.CSPPolicy)) && ui.Fallback == "" && len(ui.AllowedTools) == 0 && len(ui.AllowedToolBundles) == 0
+	return ui.OfficialCSP == nil && ui.Domain == "" && ui.PrefersBorder == nil && ui.ContentHash == "" && ui.ProtocolVersion == "" && ui.RendererURL == "" && ui.Sandbox == "" && ui.CSP == "" && (ui.CSPPolicy == nil || isZeroCSPPolicy(ui.CSPPolicy)) && ui.Fallback == "" && len(ui.AllowedTools) == 0 && len(ui.AllowedToolBundles) == 0
 }
 
 func writeCSPPolicy(policy *CSPPolicy) map[string]interface{} {

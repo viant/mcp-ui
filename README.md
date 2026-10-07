@@ -81,7 +81,7 @@ deployment posture is decided by downstream hosts.
 
 ## Specification pin
 
-This SDK targets the MCP Apps extension proposed by SEP-1865.
+This SDK targets the stable MCP Apps extension (2026-01-26) specified by SEP-1865.
 
 - Repository: `modelcontextprotocol/ext-apps`
 - Commit SHA: `9a37ad71827d076af06978fa7f7f510449687061`
@@ -90,8 +90,11 @@ This SDK targets the MCP Apps extension proposed by SEP-1865.
 - SEP discussion:
   [modelcontextprotocol/discussions/1865](https://github.com/modelcontextprotocol/modelcontextprotocol/discussions/1865)
 
-All extension identifiers, MIME types, and `_meta.ui.*` key spellings in this
-repo are pinned to that SHA.
+Official identifiers and fields follow that stable document. The `appproto`
+package's `mcpui:*` envelopes and the additional legacy metadata fields are
+explicit compatibility contracts, not the official host/view JSON-RPC protocol.
+Official web hosts should use the upstream App/AppBridge SDK and an isolated
+sandbox proxy; this Go module does not implement that browser lifecycle.
 
 ## Key exported concepts
 
@@ -104,6 +107,9 @@ Pinned identifiers:
 Current metadata surface includes:
 
 - `resourceUri`
+- official `visibility` audiences
+- official object `csp` via `ResourceUI.OfficialCSP`
+- official `domain` and `prefersBorder`
 - `allowedTools`
 - `allowedToolBundles`
 - `contentHash`
@@ -118,7 +124,11 @@ Current metadata surface includes:
 
 ### `capabilities`
 
-Capability helpers for the UI extension.
+Capability helpers for the UI extension. They read/write
+`capabilities.extensions["io.modelcontextprotocol/ui"]` with `mimeTypes`.
+The optional `Capability.ProtocolVersion` field is retained for compatibility;
+it is omitted when empty and does not negotiate the separate view handshake.
+The stable host/view protocol version is negotiated by `ui/initialize`.
 
 Use it to:
 

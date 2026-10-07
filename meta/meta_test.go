@@ -287,3 +287,27 @@ func TestReadingForeignSliceShapes(t *testing.T) {
 		t.Fatalf("allowed tools not read from []interface{}: %#v", got.AllowedTools)
 	}
 }
+
+func TestOfficialResourceCSPAndVisibilityRoundTrip(t *testing.T) {
+	tool := &schema.Tool{}
+	meta.SetToolUI(tool, meta.ToolUI{ResourceUri: "ui://generic/app", Visibility: []string{"app"}})
+	got, _ := meta.GetToolUI(tool)
+	if !reflect.DeepEqual(got.Visibility, []string{"app"}) {
+		t.Fatalf("visibility: %#v", got)
+	}
+	meta.SetToolUI(tool, meta.ToolUI{Visibility: []string{}})
+	got, _ = meta.GetToolUI(tool)
+	if got.Visibility == nil || len(got.Visibility) != 0 {
+		t.Fatal("explicit deny list was lost")
+	}
+	border := false
+	resource := &schema.Resource{}
+	meta.SetResourceUI(resource, meta.ResourceUI{OfficialCSP: &meta.ResourceCSP{ConnectDomains: []string{"https://api.example"}, FrameDomains: []string{"https://frame.example"}}, PrefersBorder: &border})
+	ui, _ := meta.GetResourceUI(resource)
+	if !reflect.DeepEqual(ui.OfficialCSP.ConnectDomains, []string{"https://api.example"}) || ui.PrefersBorder == nil || *ui.PrefersBorder {
+		t.Fatalf("official metadata: %#v", ui)
+	}
+	if _, ok := resource.Meta["ui"].(map[string]interface{})["csp"].(map[string]interface{}); !ok {
+		t.Fatal("official CSP must be an object")
+	}
+}

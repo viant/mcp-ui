@@ -19,7 +19,7 @@ func TestExtensionConstants(t *testing.T) {
 
 func TestSetClientCapability_AllocatesAndPreservesOtherEntries(t *testing.T) {
 	caps := &schema.ClientCapabilities{
-		Experimental: map[string]map[string]interface{}{
+		Extensions: map[string]map[string]interface{}{
 			"vendor.other/feature": {"hello": "world"},
 		},
 	}
@@ -30,8 +30,8 @@ func TestSetClientCapability_AllocatesAndPreservesOtherEntries(t *testing.T) {
 	}
 	capabilities.SetClientCapability(caps, want)
 
-	if other, ok := caps.Experimental["vendor.other/feature"]; !ok || other["hello"] != "world" {
-		t.Fatalf("unrelated experimental entry was mutated: %#v", caps.Experimental)
+	if other, ok := caps.Extensions["vendor.other/feature"]; !ok || other["hello"] != "world" {
+		t.Fatalf("unrelated experimental entry was mutated: %#v", caps.Extensions)
 	}
 	got, ok := capabilities.GetClientCapability(caps)
 	if !ok {
@@ -48,10 +48,10 @@ func TestSetClientCapability_NilExperimentalMap(t *testing.T) {
 		ProtocolVersion: "1.0.0",
 		MimeTypes:       []string{capabilities.ResourceMimeType},
 	})
-	if caps.Experimental == nil {
+	if caps.Extensions == nil {
 		t.Fatal("Experimental map should have been allocated")
 	}
-	if _, ok := caps.Experimental[capabilities.ExtensionName]; !ok {
+	if _, ok := caps.Extensions[capabilities.ExtensionName]; !ok {
 		t.Fatal("expected capability entry under ExtensionName")
 	}
 }
@@ -90,7 +90,7 @@ func TestGetCapability_AbsentReturnsFalse(t *testing.T) {
 
 func TestSetClientCapability_DoesNotMutateUnrelatedSubkeys(t *testing.T) {
 	caps := &schema.ClientCapabilities{
-		Experimental: map[string]map[string]interface{}{
+		Extensions: map[string]map[string]interface{}{
 			capabilities.ExtensionName: {"legacy": "should-be-replaced"},
 			"vendor.other/feature":     {"keep": 42},
 		},
@@ -99,10 +99,10 @@ func TestSetClientCapability_DoesNotMutateUnrelatedSubkeys(t *testing.T) {
 		ProtocolVersion: "1.0.0",
 		MimeTypes:       []string{capabilities.ResourceMimeType},
 	})
-	if v, ok := caps.Experimental["vendor.other/feature"]["keep"]; !ok || v != 42 {
-		t.Fatalf("unrelated entry mutated: %#v", caps.Experimental["vendor.other/feature"])
+	if v, ok := caps.Extensions["vendor.other/feature"]["keep"]; !ok || v != 42 {
+		t.Fatalf("unrelated entry mutated: %#v", caps.Extensions["vendor.other/feature"])
 	}
-	if _, hasLegacy := caps.Experimental[capabilities.ExtensionName]["legacy"]; hasLegacy {
-		t.Fatalf("old extension payload was not replaced cleanly: %#v", caps.Experimental[capabilities.ExtensionName])
+	if _, hasLegacy := caps.Extensions[capabilities.ExtensionName]["legacy"]; hasLegacy {
+		t.Fatalf("old extension payload was not replaced cleanly: %#v", caps.Extensions[capabilities.ExtensionName])
 	}
 }
