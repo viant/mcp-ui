@@ -8,7 +8,10 @@ package resource
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Scheme is the URI scheme of all MCP UI resources.
@@ -30,8 +33,8 @@ var allowedKinds = map[string]struct{}{
 	KindWidget: {},
 }
 
-// UIURI is the parsed form of a `ui://<server-scope>/<resource-kind>/<resource-id>`
-// URI. The original textual form is preserved as Raw.
+// UIURI preserves an exact ui:// resource identity. Kind and ResourceID are
+// populated only for the optional scoped legacy naming convention.
 type UIURI struct {
 	Raw         string
 	ServerScope string
@@ -39,7 +42,24 @@ type UIURI struct {
 	ResourceID  string
 }
 
-// ValidateUIURI parses and validates a `ui://...` resource URI according to
+// ValidateUIURI accepts generic official ui:// resource identities. The stable
+// extension does not impose a product's resource-kind or path convention.
+func ValidateUIURI(raw string) (UIURI, error) {
+	if len(raw) > 4096 || !utf8.ValidString(raw) || strings.IndexFunc(raw, unicode.IsSpace) >= 0 || strings.IndexFunc(raw, unicode.IsControl) >= 0 {
+		return UIURI{}, fmt.Errorf("ui uri: invalid or oversized identity")
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || !strings.HasPrefix(raw, Scheme+"://") || parsed.Scheme != Scheme || parsed.Host == "" || parsed.User != nil {
+		return UIURI{}, fmt.Errorf("ui uri: exact ui:// identity required")
+	}
+	result := UIURI{Raw: raw, ServerScope: parsed.Host}
+	if scoped, err := ValidateScopedUIURI(raw); err == nil {
+		result.Kind, result.ResourceID = scoped.Kind, scoped.ResourceID
+	}
+	return result, nil
+}
+
+// ValidateScopedUIURI parses the legacy, application-owned naming convention:
 // the grammar documented in the enhancement plan:
 //
 //	ui://<server-scope>/<resource-kind>/<resource-id>
@@ -53,7 +73,7 @@ type UIURI struct {
 //   - server-scope and resource-id MUST be non-empty
 //
 // Validation is exact; there is no fuzzy matching and no fallback guessing.
-func ValidateUIURI(raw string) (UIURI, error) {
+func ValidateScopedUIURI(raw string) (UIURI, error) {
 	if raw == "" {
 		return UIURI{}, fmt.Errorf("ui uri: empty")
 	}

@@ -2,12 +2,15 @@ package compat
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/viant/mcp-protocol/schema"
 	"github.com/viant/mcp-ui/capabilities"
 	"github.com/viant/mcp-ui/meta"
+	"github.com/viant/mcp-ui/resource"
 )
 
 // Mode is the rendering mode a server should apply to a UI-bearing tool
@@ -47,18 +50,27 @@ func (m Mode) String() string {
 }
 
 // ClientUICapable reports whether the supplied client capabilities advertise
-// the UI extension under Experimental[capabilities.ExtensionName]. nil caps
+// the supported HTML MIME under Extensions[capabilities.ExtensionName]. nil caps
 // are treated as not capable.
 func ClientUICapable(caps *schema.ClientCapabilities) bool {
-	_, ok := capabilities.GetClientCapability(caps)
-	return ok
+	capability, ok := capabilities.GetClientCapability(caps)
+	return ok && supportsHTML(capability)
 }
 
 // ServerUICapable reports whether the supplied server capabilities advertise
-// the UI extension under Experimental[capabilities.ExtensionName].
+// the supported HTML MIME under Extensions[capabilities.ExtensionName].
 func ServerUICapable(caps *schema.ServerCapabilities) bool {
-	_, ok := capabilities.GetServerCapability(caps)
-	return ok
+	capability, ok := capabilities.GetServerCapability(caps)
+	return ok && supportsHTML(capability)
+}
+
+func supportsHTML(capability capabilities.Capability) bool {
+	for _, mime := range capability.MimeTypes {
+		if mime == capabilities.ResourceMimeType {
+			return true
+		}
+	}
+	return false
 }
 
 // ToolOptsInToEmbeddedFallback reports whether the tool's `_meta.ui.fallback`
@@ -132,8 +144,8 @@ func BuildEmbeddedFallback(ctx context.Context, reader ResourceReader, uri strin
 	if reader == nil {
 		return nil, errors.New("compat: nil resource reader")
 	}
-	if uri == "" {
-		return nil, errors.New("compat: empty resource uri")
+	if _, err := resource.ValidateUIURI(uri); err != nil {
+		return nil, err
 	}
 	result, err := reader.ReadResource(ctx, uri)
 	if err != nil {
@@ -142,8 +154,31 @@ func BuildEmbeddedFallback(ctx context.Context, reader ResourceReader, uri strin
 	if result == nil || len(result.Contents) == 0 {
 		return nil, fmt.Errorf("compat: no contents for resource %q", uri)
 	}
-	first := result.Contents[0]
-	if first.Text == "" {
+	var matches []schema.ReadResourceResultContentsElem
+	for _, contents := range result.Contents {
+		if contents.Uri == uri {
+			matches = append(matches, contents)
+		}
+	}
+	if len(matches) != 1 {
+		return nil, errors.New("compat: missing or ambiguous resource identity")
+	}
+	first := matches[0]
+	if first.MimeType != nil && *first.MimeType != "" && *first.MimeType != capabilities.ResourceMimeType {
+		return nil, errors.New("compat: unsupported resource MIME type")
+	}
+	html := first.Text
+	if html == "" && first.Blob != "" {
+		if len(first.Blob) > base64.StdEncoding.EncodedLen(resource.MaxHTMLBytes) {
+			return nil, errors.New("compat: resource exceeds budget")
+		}
+		decoded, err := base64.StdEncoding.DecodeString(first.Blob)
+		if err != nil || !utf8.Valid(decoded) {
+			return nil, errors.New("compat: invalid HTML blob")
+		}
+		html = string(decoded)
+	}
+	if html == "" || len(html) > resource.MaxHTMLBytes {
 		return nil, fmt.Errorf("compat: empty text contents for resource %q", uri)
 	}
 	mimeType := capabilities.ResourceMimeType
@@ -155,7 +190,7 @@ func BuildEmbeddedFallback(ctx context.Context, reader ResourceReader, uri strin
 		Resource: schema.EmbeddedResourceResource{
 			Uri:      first.Uri,
 			MimeType: &mimeType,
-			Text:     first.Text,
+			Text:     html,
 		},
 	}
 	if ui, ok := meta.GetReadResultContentsUI(&first); ok {

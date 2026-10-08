@@ -311,3 +311,17 @@ func TestOfficialResourceCSPAndVisibilityRoundTrip(t *testing.T) {
 		t.Fatal("official CSP must be an object")
 	}
 }
+
+func TestOfficialResourcePermissionsRoundTrip(t *testing.T) {
+	res := &schema.Resource{}
+	meta.SetResourceUI(res, meta.ResourceUI{Permissions: &meta.ResourcePermissions{Camera: &struct{}{}, ClipboardWrite: &struct{}{}}})
+	ui, ok := meta.GetResourceUI(res)
+	if !ok || ui.Permissions == nil || ui.Permissions.Camera == nil || ui.Permissions.ClipboardWrite == nil || ui.Permissions.Microphone != nil || ui.Permissions.Geolocation != nil {
+		t.Fatal("official permissions were not preserved", ui.Permissions)
+	}
+	meta.SetResourceUI(res, meta.ResourceUI{Domain: "sandbox.example"})
+	ui, _ = meta.GetResourceUI(res)
+	if ui.Permissions != nil {
+		t.Fatal("stale permission declarations retained")
+	}
+}

@@ -107,10 +107,20 @@ type ResourceCSP struct {
 	BaseUriDomains  []string `json:"baseUriDomains,omitempty"`
 }
 
+// ResourcePermissions declares optional browser capabilities. Declaration is
+// a request to the host, not authority or a guarantee of permission.
+type ResourcePermissions struct {
+	Camera         *struct{} `json:"camera,omitempty"`
+	Microphone     *struct{} `json:"microphone,omitempty"`
+	Geolocation    *struct{} `json:"geolocation,omitempty"`
+	ClipboardWrite *struct{} `json:"clipboardWrite,omitempty"`
+}
+
 type ResourceUI struct {
 	// OfficialCSP encodes _meta.ui.csp as the stable object. CSP/CSPPolicy below
 	// are legacy adapter fields and must not be treated as normative metadata.
 	OfficialCSP   *ResourceCSP
+	Permissions   *ResourcePermissions
 	Domain        string
 	PrefersBorder *bool
 
@@ -406,6 +416,17 @@ func readToolUI(sub map[string]interface{}) ToolUI {
 }
 
 func writeResourceUI(sub map[string]interface{}, ui ResourceUI) {
+	if ui.Permissions != nil {
+		permissions := map[string]interface{}{}
+		for key, value := range map[string]*struct{}{"camera": ui.Permissions.Camera, "microphone": ui.Permissions.Microphone, "geolocation": ui.Permissions.Geolocation, "clipboardWrite": ui.Permissions.ClipboardWrite} {
+			if value != nil {
+				permissions[key] = map[string]interface{}{}
+			}
+		}
+		sub["permissions"] = permissions
+	} else {
+		delete(sub, "permissions")
+	}
 	if ui.Domain != "" {
 		sub["domain"] = ui.Domain
 	} else {
@@ -472,6 +493,14 @@ func writeResourceUI(sub map[string]interface{}, ui ResourceUI) {
 
 func readResourceUI(sub map[string]interface{}) ResourceUI {
 	out := ResourceUI{}
+	if permissions, ok := sub["permissions"].(map[string]interface{}); ok {
+		out.Permissions = &ResourcePermissions{}
+		for key, dest := range map[string]**struct{}{"camera": &out.Permissions.Camera, "microphone": &out.Permissions.Microphone, "geolocation": &out.Permissions.Geolocation, "clipboardWrite": &out.Permissions.ClipboardWrite} {
+			if _, ok := permissions[key].(map[string]interface{}); ok {
+				*dest = &struct{}{}
+			}
+		}
+	}
 	out.Domain, _ = sub["domain"].(string)
 	if value, ok := sub["prefersBorder"].(bool); ok {
 		out.PrefersBorder = &value
@@ -510,7 +539,7 @@ func isZeroToolUI(ui ToolUI) bool {
 }
 
 func isZeroResourceUI(ui ResourceUI) bool {
-	return ui.OfficialCSP == nil && ui.Domain == "" && ui.PrefersBorder == nil && ui.ContentHash == "" && ui.ProtocolVersion == "" && ui.RendererURL == "" && ui.Sandbox == "" && ui.CSP == "" && (ui.CSPPolicy == nil || isZeroCSPPolicy(ui.CSPPolicy)) && ui.Fallback == "" && len(ui.AllowedTools) == 0 && len(ui.AllowedToolBundles) == 0
+	return ui.OfficialCSP == nil && ui.Permissions == nil && ui.Domain == "" && ui.PrefersBorder == nil && ui.ContentHash == "" && ui.ProtocolVersion == "" && ui.RendererURL == "" && ui.Sandbox == "" && ui.CSP == "" && (ui.CSPPolicy == nil || isZeroCSPPolicy(ui.CSPPolicy)) && ui.Fallback == "" && len(ui.AllowedTools) == 0 && len(ui.AllowedToolBundles) == 0
 }
 
 func writeCSPPolicy(policy *CSPPolicy) map[string]interface{} {

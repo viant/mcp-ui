@@ -2,6 +2,7 @@ package compat_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"testing"
 
@@ -29,6 +30,30 @@ func TestClientUICapable(t *testing.T) {
 	}
 	if !compat.ClientUICapable(uiCapableClient()) {
 		t.Fatal("client with UI extension capability must be reported as UI capable")
+	}
+	for _, types := range [][]string{nil, {}, {"text/html"}, {"application/json"}} {
+		caps := &schema.ClientCapabilities{}
+		capabilities.SetClientCapability(caps, capabilities.Capability{MimeTypes: types})
+		if compat.ClientUICapable(caps) {
+			t.Fatal("unsupported MIME negotiated", types)
+		}
+	}
+}
+
+func TestFallbackRequiresExactUniqueResourceAndBoundsDecodedBlob(t *testing.T) {
+	uri, mime := "ui://weather-dashboard", capabilities.ResourceMimeType
+	html := "<!doctype html><html><body>weather</body></html>"
+	matching := schema.ReadResourceResultContentsElem{Uri: uri, MimeType: &mime, Blob: base64.StdEncoding.EncodeToString([]byte(html))}
+	reader := &stubReader{result: &schema.ReadResourceResult{Contents: []schema.ReadResourceResultContentsElem{{Uri: "ui://other", Text: "wrong"}, matching}}}
+	got, err := compat.BuildEmbeddedFallback(context.Background(), reader, uri)
+	if err != nil || got.Resource.Uri != uri || got.Resource.Text != html {
+		t.Fatal("exact blob identity not preserved", err)
+	}
+	for _, contents := range [][]schema.ReadResourceResultContentsElem{{{Uri: "ui://other", Text: html}}, {matching, matching}, {{Uri: uri, MimeType: ptr("text/html"), Text: html}}, {{Uri: uri, Blob: "not-base64"}}} {
+		reader.result.Contents = contents
+		if _, err := compat.BuildEmbeddedFallback(context.Background(), reader, uri); err == nil {
+			t.Fatal("unsafe fallback accepted")
+		}
 	}
 }
 

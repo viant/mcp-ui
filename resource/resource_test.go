@@ -22,8 +22,21 @@ func TestValidateUIURI(t *testing.T) {
 	if _, err := resource.ValidateUIURI("http://x/demo/y"); err == nil {
 		t.Fatal("expected scheme validation failure")
 	}
-	if _, err := resource.ValidateUIURI("ui://x/unknown/y"); err == nil {
+	if _, err := resource.ValidateScopedUIURI("ui://x/unknown/y"); err == nil {
 		t.Fatal("expected kind validation failure")
+	}
+	for _, uri := range []string{"ui://weather-dashboard", "ui://weather-server/dashboard-template", "ui://server/templates/chart.html?theme=dark#v2", "ui://x/unknown/y"} {
+		if parsed, err := resource.ValidateUIURI(uri); err != nil || parsed.Raw != uri {
+			t.Fatal("official resource identity rejected", uri, err)
+		}
+		if _, err := resource.NewHTMLContents(uri, "<!doctype html><html><body>app</body></html>", metaui.ResourceUI{}); err != nil {
+			t.Fatal("generic resource builder rejected identity", err)
+		}
+	}
+	for _, uri := range []string{"ui://", "ui://user:password@host", "ui://host/\npath", "ui://host/%zz", "ui://host/has space"} {
+		if _, err := resource.ValidateUIURI(uri); err == nil {
+			t.Fatal("invalid identity accepted", uri)
+		}
 	}
 }
 

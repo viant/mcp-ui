@@ -38,7 +38,7 @@ That means:
 
 - typed capability negotiation
 - typed `_meta.ui` metadata
-- canonical `ui://...` resource construction
+- generic, exact `ui://...` resource construction
 - browser host/guest envelope types
 - exact compatibility switching between negotiated UI resources and explicit
   embedded fallback
@@ -62,12 +62,14 @@ Implemented in the current worktree:
 - browser envelope types in `appproto`
 - compatibility switching in `compat`
 
-The current compatibility rule is exact:
+The current compatibility rule is exact (the negotiated MIME list must include `text/html;profile=mcp-app`):
 
 - if UI extension capability is negotiated, use `_meta.ui.resourceUri` plus
   `resources/read`
 - if UI extension capability is **not** negotiated, embedded fallback is
   allowed **only** when `_meta.ui.fallback = "embedded"` is explicitly present
+
+The `appproto` package is an explicit legacy compatibility API. It does not implement official `ui/initialize` or the App/AppBridge JSON-RPC lifecycle.
 
 Current maturity in this repo:
 
@@ -109,7 +111,7 @@ Current metadata surface includes:
 - `resourceUri`
 - official `visibility` audiences
 - official object `csp` via `ResourceUI.OfficialCSP`
-- official `domain` and `prefersBorder`
+- official `domain`, `prefersBorder` and optional browser `permissions`
 - `allowedTools`
 - `allowedToolBundles`
 - `contentHash`
@@ -180,7 +182,8 @@ Use it to:
 
 Main exports:
 
-- `ValidateUIURI`
+- `ValidateUIURI` for generic official resource identities
+- `ValidateScopedUIURI` only for the legacy `server/kind/id` naming convention
 - `ContentHash`
 - `NewHTMLResource`
 - `NewHTMLContents`
@@ -246,7 +249,6 @@ func main() {
 	// 1. Server advertises UI capability.
 	serverCaps := &schema.ServerCapabilities{}
 	capabilities.SetServerCapability(serverCaps, capabilities.Capability{
-		ProtocolVersion: "1.0.0",
 		MimeTypes:       []string{capabilities.ResourceMimeType},
 	})
 
@@ -319,6 +321,14 @@ func (r compatReader) ReadResource(context.Context, string) (*schema.ReadResourc
 func ptr[T any](v T) *T { return &v }
 ```
 
+The stable specification permits resource IDs such as `ui://weather-dashboard` or
+`ui://weather-server/dashboard-template`; product naming rules must not restrict
+these identities. `compat.BuildEmbeddedFallback` selects one exact matching URI,
+rejects ambiguous or incompatible contents, and bounds UTF-8 HTML/blob payloads.
+Legacy fallback may default an omitted MIME; the official resource path still
+requires the exact MCP Apps MIME. Hosts own HTML validation, resource review, CSP
+enforcement, sandboxing and permission decisions.
+
 ## Development
 
 Local replace in a consumer repo:
@@ -327,11 +337,7 @@ Local replace in a consumer repo:
 replace github.com/viant/mcp-ui => ../mcp-ui
 ```
 
-This repo itself uses:
-
-```go
-replace github.com/viant/mcp-protocol => ../mcp-protocol
-```
+Published dependencies are pinned in `go.mod`; local replacements are development-only.
 
 ## Testing
 
@@ -362,4 +368,4 @@ hosts and products consume it downstream.
 
 ## License
 
-Apache 2.0. See [LICENSE](/Users/awitas/go/src/github.com/viant/mcp-ui/LICENSE).
+Apache 2.0. See [LICENSE](LICENSE).
