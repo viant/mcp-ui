@@ -1,0 +1,10 @@
+id: counterdemo
+name: Counter Demo
+description: Isolated MCP counter verification
+modelRef: openai_gpt-5.2
+tool:
+  callExposure: conversation
+  allowOverflowHelpers: false
+  items:
+    - name: counterdemo-counter_view
+    - name: counterdemo-counter_increment

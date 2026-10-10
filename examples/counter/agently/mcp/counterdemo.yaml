@@ -1,0 +1,4 @@
+name: counterdemo
+transport:
+  type: streamable
+  url: http://127.0.0.1:29411/mcp
